@@ -12,32 +12,8 @@ function showDebug(msg) {
   console.log(msg);
 }
 
-// --- PEERJS DIRECT WEBRTC CONNECTION ---
-const DRIVER_ROOM_ID = 'fairride-driver-hub-prod-99';
-let peer = null;
-let activeConnection = null;
-
-function initPeer() {
-  peer = new Peer();
-
-  peer.on('open', (id) => {
-    showDebug('Rider ready. Connected to network.');
-    const statusEl = document.getElementById('connection-status');
-    if (statusEl) {
-      statusEl.innerText = '● Connected';
-      statusEl.style.color = '#10b981';
-    }
-  });
-
-  peer.on('error', (err) => {
-    showDebug('Connection Warning: ' + err.type);
-    console.warn(err);
-  });
-}
-
-initPeer();
-
-let map;
+// --- STATE VARIABLES ---
+let map = null;
 let pickupMarker = null;
 let dropoffMarker = null;
 let routeLine = null;
@@ -48,6 +24,56 @@ let dropoffCoords = null;
 let calculatedFare = 0;
 let rawRouteCoords = [];
 
+// --- PEERJS CONNECTION ---
+const DRIVER_ROOM_ID = 'fairride-driver-hub-prod-99';
+let peer = null;
+let activeConnection = null;
+
+function initPeer() {
+  try {
+    if (typeof Peer === 'undefined') {
+      showDebug('PeerJS library not loaded. Check script tag.');
+      return;
+    }
+
+    peer = new Peer();
+
+    peer.on('open', (id) => {
+      showDebug('Network: Connected & Ready');
+      const statusEl = document.getElementById('connection-status');
+      if (statusEl) {
+        statusEl.innerText = '● Connected';
+        statusEl.style.color = '#10b981';
+      }
+    });
+
+    peer.on('error', (err) => {
+      showDebug('Network Notice: ' + (err.type || 'Offline'));
+      console.warn('Peer error:', err);
+    });
+  } catch (e) {
+    showDebug('Network Init Error: ' + e.message);
+  }
+}
+
+// --- MAP INITIALIZATION ---
+function initMap() {
+  if (map) return;
+
+  const defaultCoords = [40.7128, -74.0060];
+  map = L.map('map', { zoomControl: false }).setView(defaultCoords, 13);
+
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles &copy; Esri'
+  }).addTo(map);
+
+  setTimeout(() => {
+    if (map) map.invalidateSize();
+  }, 250);
+}
+
+// --- TOLLS ---
 const TOLL_CHECKPOINTS = [
   {
     name: "Verrazzano Bridge",
@@ -93,31 +119,7 @@ const TOLL_CHECKPOINTS = [
   }
 ];
 
-function logout() {
-  if (peer) peer.destroy();
-  try {
-    localStorage.removeItem('fairride_session');
-  } catch (e) {}
-  window.location.href = '../login.html';
-}
-
-function initMap() {
-  if (map) {
-    map.invalidateSize();
-    return;
-  }
-
-  const defaultCoords = [40.7128, -74.0060];
-  map = L.map('map', { zoomControl: false }).setView(defaultCoords, 12);
-
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    attribution: 'Tiles &copy; Esri'
-  }).addTo(map);
-
-  useCurrentLocation();
-}
-
+// --- LOCATION / GPS ---
 async function useCurrentLocation() {
   const gpsBtn = document.getElementById('gps-btn');
   if (gpsBtn) gpsBtn.innerText = '...';
@@ -182,11 +184,15 @@ async function useCurrentLocation() {
 
   navigator.geolocation.getCurrentPosition(
     (pos) => applyCoordinates(pos.coords.latitude, pos.coords.longitude),
-    () => fallbackToIP(),
-    { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
+    (err) => {
+      console.warn("GPS error:", err);
+      fallbackToIP();
+    },
+    { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
   );
 }
 
+// --- SEARCH SUGGESTIONS ---
 function fetchSuggestions(type) {
   clearTimeout(debounceTimer);
   const inputEl = document.getElementById(type + '-input');
@@ -247,6 +253,7 @@ function selectAddress(type, label, lat, lon) {
   checkAndRecalculate();
 }
 
+// --- ROUTE & FARE CALCULATION ---
 function checkAndRecalculate() {
   if (!pickupCoords || !dropoffCoords) return;
 
@@ -345,7 +352,7 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Broadcast ride directly to driver
+// --- DISPATCH REQUEST ---
 function requestRide() {
   const reqBtn = document.getElementById('request-btn');
   reqBtn.disabled = true;
@@ -385,24 +392,41 @@ function requestRide() {
   });
 
   activeConnection.on('error', (err) => {
-    showDebug('Dispatch Error: Driver may be offline.');
+    showDebug('Dispatch Error: Driver offline.');
     reqBtn.disabled = false;
     reqBtn.innerText = 'Retry Request';
   });
 
   setTimeout(() => {
     if (reqBtn.innerText === 'Connecting to Driver...') {
-      showDebug('Driver is offline or not found. Open driver.html on PC first.');
+      showDebug('Driver is offline. Make sure driver.html is open on PC.');
       reqBtn.disabled = false;
       reqBtn.innerText = 'Driver Offline - Retry';
     }
   }, 7000);
 }
 
+function logout() {
+  if (peer) peer.destroy();
+  try {
+    localStorage.removeItem('fairride_session');
+  } catch (e) {}
+  window.location.href = '../login.html';
+}
+
+// --- BOOT SEQUENCE ---
 window.onload = function() {
   const session = JSON.parse(localStorage.getItem('fairride_session') || 'null');
   if (session && session.name) {
     document.getElementById('display-user').innerText = 'Hi, ' + session.name;
   }
+  
+  // 1. Map loads first immediately
   initMap();
+  
+  // 2. Fetch location automatically
+  useCurrentLocation();
+
+  // 3. Connect network in background
+  initPeer();
 };
