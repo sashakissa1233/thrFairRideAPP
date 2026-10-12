@@ -6,10 +6,10 @@
   }
 })();
 
-// --- REAL-TIME NETWORK (MQTT OVER WSS) ---
-const MQTT_BROKER = 'wss://broker.hivemq.com:8000/mqtt';
-const TOPIC_REQUESTS = 'fairride_v1_channel/requests';
-const TOPIC_ACCEPTS = 'fairride_v1_channel/accepts';
+// --- PEERJS DIRECT WEBRTC DISPATCH HUB ---
+const DRIVER_ROOM_ID = 'fairride-driver-hub-prod-99';
+let peer = null;
+let currentRiderConn = null;
 
 let map;
 let driverMarker = null;
@@ -17,35 +17,38 @@ let routeLine = null;
 let currentOffer = null;
 let watchId = null;
 
-const client = mqtt.connect(MQTT_BROKER, {
-  keepalive: 30,
-  reconnectPeriod: 2000,
-  connectTimeout: 10000
-});
+function initDriverPeer() {
+  peer = new Peer(DRIVER_ROOM_ID);
 
-client.on('connect', () => {
-  const statusEl = document.getElementById('gps-status-text');
-  if (statusEl) statusEl.innerText = 'Waiting for nearby ride requests...';
-  client.subscribe(TOPIC_REQUESTS);
-});
+  peer.on('open', (id) => {
+    console.log('Driver dispatch hub is LIVE. ID:', id);
+    const statusEl = document.getElementById('gps-status-text');
+    if (statusEl) statusEl.innerText = 'Online • Waiting for rider requests...';
+  });
 
-client.on('error', (err) => {
-  console.warn('Driver MQTT error:', err);
-});
+  peer.on('connection', (conn) => {
+    currentRiderConn = conn;
 
-client.on('message', (topic, message) => {
-  if (topic === TOPIC_REQUESTS) {
-    try {
-      const data = JSON.parse(message.toString());
-      handleIncomingRequest(data);
-    } catch (e) {
-      console.error(e);
+    conn.on('data', (data) => {
+      if (data && data.type === 'NEW_RIDE_REQUEST') {
+        handleIncomingRequest(data);
+      }
+    });
+  });
+
+  peer.on('error', (err) => {
+    if (err.type === 'unavailable-id') {
+      const statusEl = document.getElementById('gps-status-text');
+      if (statusEl) statusEl.innerText = 'Online (Reconnected)';
+    } else {
+      console.warn('Peer error:', err);
     }
-  }
-});
+  });
+}
 
 function driverLogout() {
   if (watchId) navigator.geolocation.clearWatch(watchId);
+  if (peer) peer.destroy();
   try {
     localStorage.removeItem('fairride_session');
   } catch (e) {}
@@ -67,6 +70,8 @@ function initDriverMap() {
     map.invalidateSize();
     locateDriver();
   }, 200);
+
+  initDriverPeer();
 }
 
 function updateDriverPosition(lat, lon, zoom = 14, sourceLabel = "GPS") {
@@ -162,18 +167,19 @@ function handleIncomingRequest(data) {
 }
 
 function acceptRide() {
-  if (!currentOffer) return;
+  if (!currentOffer || !currentRiderConn) return;
 
   const session = JSON.parse(localStorage.getItem('fairride_session') || '{}');
   const dName = session.name ? `${session.name} (Partner)` : 'Driver (Fair Partner)';
 
   const responsePayload = {
+    type: 'RIDE_ACCEPTED',
     driverName: dName,
     eta: '5 mins',
     timestamp: Date.now()
   };
 
-  client.publish(TOPIC_ACCEPTS, JSON.stringify(responsePayload), { qos: 1 });
+  currentRiderConn.send(responsePayload);
 
   document.getElementById('incoming-request-card').innerHTML = `
     <div style="color: #10b981; font-weight: 700; margin-bottom: 6px;">Ride Accepted!</div>
