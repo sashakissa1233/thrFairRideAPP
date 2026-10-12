@@ -17,6 +17,7 @@ let map;
 let driverMarker = null;
 let routeLine = null;
 let currentOffer = null;
+let watchId = null;
 
 pieSocket.subscribe('fairride_global_channel').then(ch => {
   channel = ch;
@@ -27,6 +28,7 @@ pieSocket.subscribe('fairride_global_channel').then(ch => {
 });
 
 function driverLogout() {
+  if (watchId) navigator.geolocation.clearWatch(watchId);
   try {
     localStorage.removeItem('fairride_session');
   } catch (e) {}
@@ -35,7 +37,7 @@ function driverLogout() {
 
 function initDriverMap() {
   const defaultCoords = [40.7128, -74.0060];
-  map = L.map('map', { zoomControl: false }).setView(defaultCoords, 12);
+  map = L.map('map', { zoomControl: false }).setView(defaultCoords, 13);
 
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
@@ -44,18 +46,66 @@ function initDriverMap() {
 
   driverMarker = L.marker(defaultCoords).addTo(map).bindPopup("You (Driver)").openPopup();
 
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        map.setView([lat, lon], 13);
-        driverMarker.setLatLng([lat, lon]);
-      },
-      () => {},
-      { enableHighAccuracy: false, timeout: 5000 }
-    );
+  locateDriver();
+}
+
+// IP fallback matching Rider logic
+async function fallbackToIP() {
+  try {
+    const res = await fetch('https://ipapi.co/json/');
+    const data = await res.json();
+    if (data.latitude && data.longitude) {
+      updateDriverPosition(data.latitude, data.longitude, 13);
+      return;
+    }
+  } catch (e) {}
+}
+
+function updateDriverPosition(lat, lon, zoom = null) {
+  const coords = [lat, lon];
+  if (driverMarker) {
+    driverMarker.setLatLng(coords);
+  } else {
+    driverMarker = L.marker(coords).addTo(map).bindPopup("You (Driver)").openPopup();
   }
+  if (zoom) {
+    map.setView(coords, zoom);
+  } else {
+    map.panTo(coords);
+  }
+}
+
+function locateDriver() {
+  if (!navigator.geolocation) {
+    fallbackToIP();
+    return;
+  }
+
+  // First fetch position immediately with fallback
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      updateDriverPosition(pos.coords.latitude, pos.coords.longitude, 15);
+      startLiveTracking();
+    },
+    () => {
+      fallbackToIP();
+      startLiveTracking();
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+  );
+}
+
+// Continuously update driver location as the car moves
+function startLiveTracking() {
+  if (!navigator.geolocation) return;
+
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      updateDriverPosition(pos.coords.latitude, pos.coords.longitude);
+    },
+    (err) => console.warn('Live tracking update failed:', err),
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+  );
 }
 
 function handleIncomingRequest(data) {
