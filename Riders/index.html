@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Real-Time Internet Relay -->
-  <script src="https://unpkg.com/piesocket-js@5"></script>
+  <!-- Real-Time Cloud Relay -->
+  <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,7 +21,7 @@
     <div class="header-bar">
       <div>
         <h3 id="display-user">Hi, Rider</h3>
-        <span class="status-online">● Online</span>
+        <span class="status-online" id="connection-status">● Connecting...</span>
       </div>
       <button class="logout-btn" onclick="logout()">Log Out</button>
     </div>
