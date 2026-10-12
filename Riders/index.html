@@ -8,12 +8,17 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Real-Time Cloud Relay -->
-  <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+  <!-- PeerJS WebRTC Relay -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+  <!-- Live On-Screen Debug Banner -->
+  <div id="mobile-debug" style="position: fixed; top: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.85); color: #00ff66; font-family: monospace; font-size: 11px; padding: 8px 12px; border-radius: 8px; z-index: 99999; border: 1px solid #333; pointer-events: none; word-break: break-all;">
+    Network: Connecting...
+  </div>
 
   <div id="map"></div>
 
@@ -21,7 +26,7 @@
     <div class="header-bar">
       <div>
         <h3 id="display-user">Hi, Rider</h3>
-        <span class="status-online" id="connection-status">● Connecting...</span>
+        <span class="status-online" id="connection-status">● Online</span>
       </div>
       <button class="logout-btn" onclick="logout()">Log Out</button>
     </div>
