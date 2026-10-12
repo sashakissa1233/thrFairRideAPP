@@ -1,10 +1,29 @@
-// --- SESSION GUARD: Prevent direct URL access without login ---
+// --- SESSION GUARD ---
 (function checkRiderAuth() {
   const session = JSON.parse(localStorage.getItem('fairride_session') || 'null');
   if (!session || session.role !== 'rider') {
     window.location.href = '../login.html';
   }
 })();
+
+// --- REAL-TIME INTERNET RELAY ---
+const pieSocket = new PieSocket.default({
+  clusterId: 'demo',
+  apiKey: 'VC3mXZalsjhgfpnjvucxR4RydWuDYnxkoG0rLZ5m'
+});
+
+let channel;
+pieSocket.subscribe('fairride_global_channel').then(ch => {
+  channel = ch;
+
+  channel.listen('RIDE_ACCEPTED', (data) => {
+    const reqBtn = document.getElementById('request-btn');
+    reqBtn.style.background = '#3b82f6';
+    reqBtn.style.color = '#fff';
+    reqBtn.innerText = `Driver Found: ${data.driverName} (ETA ${data.eta})`;
+    alert(`A driver accepted your ride!\n\nDriver: ${data.driverName}\nArriving in: ${data.eta}`);
+  });
+});
 
 let map;
 let pickupMarker = null;
@@ -17,23 +36,6 @@ let dropoffCoords = null;
 let calculatedFare = 0;
 let rawRouteCoords = [];
 
-// Listen for driver acceptance via localStorage event
-window.addEventListener('storage', (event) => {
-  if (event.key === 'fairride_driver_response' && event.newValue) {
-    try {
-      const data = JSON.parse(event.newValue);
-      if (data.type === 'RIDE_ACCEPTED') {
-        const reqBtn = document.getElementById('request-btn');
-        reqBtn.style.background = '#3b82f6';
-        reqBtn.style.color = '#fff';
-        reqBtn.innerText = `Driver Found: ${data.driverName} (ETA ${data.eta})`;
-        alert(`A driver accepted your ride!\n\nDriver: ${data.driverName}\nArriving in: ${data.eta}`);
-      }
-    } catch (e) {}
-  }
-});
-
-// Toll checkpoints
 const TOLL_CHECKPOINTS = [
   {
     name: "Verrazzano Bridge",
@@ -330,7 +332,6 @@ function requestRide() {
   reqBtn.innerText = 'Broadcasting to nearby drivers...';
 
   const payload = {
-    type: 'NEW_RIDE_REQUEST',
     pickupText: p,
     dropoffText: d,
     fare: calculatedFare,
@@ -339,7 +340,9 @@ function requestRide() {
     timestamp: Date.now()
   };
 
-  localStorage.setItem('fairride_ride_request', JSON.stringify(payload));
+  if (channel) {
+    channel.publish('NEW_RIDE_REQUEST', payload);
+  }
 }
 
 window.onload = function() {
