@@ -68,6 +68,23 @@
       margin-top: 6px;
       font-size: 13px;
     }
+
+    .driver-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-gps-driver {
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      color: #10b981;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -80,14 +97,14 @@
         <h3 id="driver-display-name">Driver Portal</h3>
         <span class="driver-tag">0% Commission Partner</span>
       </div>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <span style="font-size: 13px; color: #10b981;">● Online</span>
+      <div class="driver-actions">
+        <button class="btn-gps-driver" id="driver-gps-btn" onclick="locateDriver()">GPS</button>
         <button onclick="driverLogout()" style="background: none; border: none; color: #ef4444; font-size: 13px; cursor: pointer;">Log Out</button>
       </div>
     </div>
 
-    <div id="waiting-status" style="padding: 16px 0; color: #a1a1aa; font-size: 14px; text-align: center;">
-      Waiting for nearby ride requests...
+    <div id="waiting-status" style="padding: 12px 0; color: #a1a1aa; font-size: 13px; text-align: center;">
+      <span id="gps-status-text">Detecting your location...</span>
     </div>
 
     <div id="incoming-request-card">
