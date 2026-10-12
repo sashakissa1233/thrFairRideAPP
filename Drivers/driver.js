@@ -21,7 +21,6 @@ let watchId = null;
 
 pieSocket.subscribe('fairride_global_channel').then(ch => {
   channel = ch;
-
   channel.listen('NEW_RIDE_REQUEST', (data) => {
     handleIncomingRequest(data);
   });
@@ -46,64 +45,91 @@ function initDriverMap() {
 
   driverMarker = L.marker(defaultCoords).addTo(map).bindPopup("You (Driver)").openPopup();
 
-  locateDriver();
+  // Force Leaflet recalculation after DOM rendering
+  setTimeout(() => {
+    map.invalidateSize();
+    locateDriver();
+  }, 200);
 }
 
-// IP fallback matching Rider logic
+function updateDriverPosition(lat, lon, zoom = 14, sourceLabel = "GPS") {
+  const coords = [lat, lon];
+  if (driverMarker) {
+    driverMarker.setLatLng(coords);
+    driverMarker.setPopupContent(`Driver Location (${sourceLabel})`).openPopup();
+  } else {
+    driverMarker = L.marker(coords).addTo(map).bindPopup(`Driver Location (${sourceLabel})`).openPopup();
+  }
+
+  map.setView(coords, zoom);
+  
+  const statusEl = document.getElementById('gps-status-text');
+  if (statusEl) {
+    statusEl.innerText = `Online • Locked via ${sourceLabel}`;
+  }
+}
+
+// Multi-provider fallback for desktop/Wi-Fi environments
 async function fallbackToIP() {
+  const statusEl = document.getElementById('gps-status-text');
+  if (statusEl) statusEl.innerText = 'Acquiring network location...';
+
+  // Primary IP service
   try {
     const res = await fetch('https://ipapi.co/json/');
     const data = await res.json();
     if (data.latitude && data.longitude) {
-      updateDriverPosition(data.latitude, data.longitude, 13);
+      updateDriverPosition(data.latitude, data.longitude, 13, "Network/IP");
       return;
     }
   } catch (e) {}
-}
 
-function updateDriverPosition(lat, lon, zoom = null) {
-  const coords = [lat, lon];
-  if (driverMarker) {
-    driverMarker.setLatLng(coords);
-  } else {
-    driverMarker = L.marker(coords).addTo(map).bindPopup("You (Driver)").openPopup();
-  }
-  if (zoom) {
-    map.setView(coords, zoom);
-  } else {
-    map.panTo(coords);
-  }
+  // Secondary IP service in case of ad-blocker filtering
+  try {
+    const res2 = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client');
+    const data2 = await res2.json();
+    if (data2.latitude && data2.longitude) {
+      updateDriverPosition(data2.latitude, data2.longitude, 13, "Network");
+      return;
+    }
+  } catch (e) {}
+
+  if (statusEl) statusEl.innerText = 'Location unavailable. Tap GPS to retry.';
 }
 
 function locateDriver() {
+  const gpsBtn = document.getElementById('driver-gps-btn');
+  if (gpsBtn) gpsBtn.innerText = '...';
+
   if (!navigator.geolocation) {
     fallbackToIP();
+    if (gpsBtn) gpsBtn.innerText = 'GPS';
     return;
   }
 
-  // First fetch position immediately with fallback
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      updateDriverPosition(pos.coords.latitude, pos.coords.longitude, 15);
+      updateDriverPosition(pos.coords.latitude, pos.coords.longitude, 15, "Device Sensor");
+      if (gpsBtn) gpsBtn.innerText = 'GPS';
       startLiveTracking();
     },
-    () => {
+    (err) => {
+      console.warn("Device GPS failed, falling back to IP:", err.message);
       fallbackToIP();
-      startLiveTracking();
+      if (gpsBtn) gpsBtn.innerText = 'GPS';
     },
-    { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+    { enableHighAccuracy: false, timeout: 6000, maximumAge: 30000 }
   );
 }
 
-// Continuously update driver location as the car moves
 function startLiveTracking() {
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation || watchId !== null) return;
 
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
-      updateDriverPosition(pos.coords.latitude, pos.coords.longitude);
+      updateDriverPosition(pos.coords.latitude, pos.coords.longitude, null, "Live Sensor");
     },
-    (err) => console.warn('Live tracking update failed:', err),
+    (err) => console.warn('Background position update paused:', err.message),
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
   );
 }
