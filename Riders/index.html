@@ -5,19 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FairRide - Rider Web App</title>
   
-  <!-- Leaflet Map Library -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Stylesheet -->
+  <!-- Real-Time Internet Relay -->
+  <script src="https://unpkg.com/piesocket-js@5"></script>
+
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- Full-Screen Map -->
   <div id="map"></div>
 
-  <!-- Rider Booking Panel -->
   <div id="ride-panel">
     <div class="header-bar">
       <div>
@@ -27,7 +26,6 @@
       <button class="logout-btn" onclick="logout()">Log Out</button>
     </div>
 
-    <!-- Inputs -->
     <div class="location-inputs">
       <div class="input-wrapper">
         <div class="field-row">
@@ -47,7 +45,6 @@
       </div>
     </div>
 
-    <!-- Fare Breakdown Card -->
     <div class="price-card">
       <div class="price-header">
         <div>
@@ -67,7 +64,6 @@
     <button class="btn" id="request-btn" disabled onclick="requestRide()">Select Both Locations</button>
   </div>
 
-  <!-- Application Logic -->
   <script src="app.js"></script>
 </body>
 </html>
