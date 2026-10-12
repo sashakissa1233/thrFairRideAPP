@@ -6,24 +6,42 @@
   }
 })();
 
-// --- REAL-TIME INTERNET RELAY ---
-const pieSocket = new PieSocket.default({
-  clusterId: 'demo',
-  apiKey: 'VC3mXZalsjhgfpnjvucxR4RydWuDYnxkoG0rLZ5m'
-});
+// --- REAL-TIME NETWORK (MQTT OVER WSS) ---
+const MQTT_BROKER = 'wss://broker.hivemq.com:8000/mqtt';
+const TOPIC_REQUESTS = 'fairride_v1_channel/requests';
+const TOPIC_ACCEPTS = 'fairride_v1_channel/accepts';
 
-let channel;
 let map;
 let driverMarker = null;
 let routeLine = null;
 let currentOffer = null;
 let watchId = null;
 
-pieSocket.subscribe('fairride_global_channel').then(ch => {
-  channel = ch;
-  channel.listen('NEW_RIDE_REQUEST', (data) => {
-    handleIncomingRequest(data);
-  });
+const client = mqtt.connect(MQTT_BROKER, {
+  keepalive: 30,
+  reconnectPeriod: 2000,
+  connectTimeout: 10000
+});
+
+client.on('connect', () => {
+  const statusEl = document.getElementById('gps-status-text');
+  if (statusEl) statusEl.innerText = 'Waiting for nearby ride requests...';
+  client.subscribe(TOPIC_REQUESTS);
+});
+
+client.on('error', (err) => {
+  console.warn('Driver MQTT error:', err);
+});
+
+client.on('message', (topic, message) => {
+  if (topic === TOPIC_REQUESTS) {
+    try {
+      const data = JSON.parse(message.toString());
+      handleIncomingRequest(data);
+    } catch (e) {
+      console.error(e);
+    }
+  }
 });
 
 function driverLogout() {
@@ -43,9 +61,8 @@ function initDriverMap() {
     attribution: 'Tiles &copy; Esri'
   }).addTo(map);
 
-  driverMarker = L.marker(defaultCoords).addTo(map).bindPopup("You (Driver)").openPopup();
+  driverMarker = L.marker(defaultCoords).addTo(map).bindPopup("Driver Location").openPopup();
 
-  // Force Leaflet recalculation after DOM rendering
   setTimeout(() => {
     map.invalidateSize();
     locateDriver();
@@ -56,25 +73,19 @@ function updateDriverPosition(lat, lon, zoom = 14, sourceLabel = "GPS") {
   const coords = [lat, lon];
   if (driverMarker) {
     driverMarker.setLatLng(coords);
-    driverMarker.setPopupContent(`Driver Location (${sourceLabel})`).openPopup();
+    driverMarker.setPopupContent(`Driver (${sourceLabel})`).openPopup();
   } else {
-    driverMarker = L.marker(coords).addTo(map).bindPopup(`Driver Location (${sourceLabel})`).openPopup();
+    driverMarker = L.marker(coords).addTo(map).bindPopup(`Driver (${sourceLabel})`).openPopup();
   }
 
-  map.setView(coords, zoom);
-  
-  const statusEl = document.getElementById('gps-status-text');
-  if (statusEl) {
-    statusEl.innerText = `Online • Locked via ${sourceLabel}`;
+  if (zoom) {
+    map.setView(coords, zoom);
+  } else {
+    map.panTo(coords);
   }
 }
 
-// Multi-provider fallback for desktop/Wi-Fi environments
 async function fallbackToIP() {
-  const statusEl = document.getElementById('gps-status-text');
-  if (statusEl) statusEl.innerText = 'Acquiring network location...';
-
-  // Primary IP service
   try {
     const res = await fetch('https://ipapi.co/json/');
     const data = await res.json();
@@ -84,7 +95,6 @@ async function fallbackToIP() {
     }
   } catch (e) {}
 
-  // Secondary IP service in case of ad-blocker filtering
   try {
     const res2 = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client');
     const data2 = await res2.json();
@@ -93,8 +103,6 @@ async function fallbackToIP() {
       return;
     }
   } catch (e) {}
-
-  if (statusEl) statusEl.innerText = 'Location unavailable. Tap GPS to retry.';
 }
 
 function locateDriver() {
@@ -114,11 +122,11 @@ function locateDriver() {
       startLiveTracking();
     },
     (err) => {
-      console.warn("Device GPS failed, falling back to IP:", err.message);
+      console.warn("Device GPS error, switching to IP:", err.message);
       fallbackToIP();
       if (gpsBtn) gpsBtn.innerText = 'GPS';
     },
-    { enableHighAccuracy: false, timeout: 6000, maximumAge: 30000 }
+    { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
   );
 }
 
@@ -129,7 +137,7 @@ function startLiveTracking() {
     (pos) => {
       updateDriverPosition(pos.coords.latitude, pos.coords.longitude, null, "Live Sensor");
     },
-    (err) => console.warn('Background position update paused:', err.message),
+    (err) => console.warn('Background tracking update error:', err.message),
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
   );
 }
@@ -165,9 +173,7 @@ function acceptRide() {
     timestamp: Date.now()
   };
 
-  if (channel) {
-    channel.publish('RIDE_ACCEPTED', responsePayload);
-  }
+  client.publish(TOPIC_ACCEPTS, JSON.stringify(responsePayload), { qos: 1 });
 
   document.getElementById('incoming-request-card').innerHTML = `
     <div style="color: #10b981; font-weight: 700; margin-bottom: 6px;">Ride Accepted!</div>
