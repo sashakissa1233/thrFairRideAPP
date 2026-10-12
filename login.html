@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FairRide - Secure Login</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background: #0f0f11;
+      color: #fff;
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .auth-card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      width: 100%;
+      max-width: 400px;
+      border-radius: 18px;
+      padding: 30px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
+    }
+
+    .brand {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .brand h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .brand h1 span {
+      color: #10b981;
+    }
+
+    .brand p {
+      font-size: 13px;
+      color: #a1a1aa;
+      margin-top: 4px;
+    }
+
+    /* Role Selector */
+    .role-toggle {
+      display: flex;
+      background: #27272a;
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 20px;
+    }
+
+    .role-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: transparent;
+      color: #a1a1aa;
+      font-weight: 600;
+      font-size: 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .role-btn.active {
+      background: #10b981;
+      color: #000;
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-bottom: 14px;
+      text-align: left;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #a1a1aa;
+      margin-bottom: 6px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-wrapper input {
+      width: 100%;
+      padding: 12px 14px;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .input-wrapper input:focus {
+      border-color: #10b981;
+    }
+
+    .toggle-pwd {
+      position: absolute;
+      right: 12px;
+      background: none;
+      border: none;
+      color: #a1a1aa;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* Submit Button */
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      background: #10b981;
+      border: none;
+      border-radius: 8px;
+      color: #000;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .btn-submit:hover {
+      background: #059669;
+    }
+
+    /* Switch mode link */
+    .switch-mode {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 13px;
+      color: #a1a1aa;
+    }
+
+    .switch-mode span {
+      color: #10b981;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    /* Alert Message */
+    .alert-msg {
+      display: none;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+
+    .alert-msg.error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+    }
+
+    .alert-msg.success {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #86efac;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="auth-card">
+    <div class="brand">
+      <h1>Fair<span>Ride</span></h1>
+      <p id="sub-title">Zero Commission Peer-to-Peer Rides</p>
+    </div>
+
+    <!-- Alert Box -->
+    <div id="alert-box" class="alert-msg"></div>
+
+    <!-- Role Toggle -->
+    <div class="role-toggle">
+      <button class="role-btn active" id="btn-role-rider" onclick="selectRole('rider')">Rider</button>
+      <button class="role-btn" id="btn-role-driver" onclick="selectRole('driver')">Driver</button>
+    </div>
+
+    <!-- Form -->
+    <form id="auth-form" onsubmit="handleAuth(event)">
+      <div class="form-group" id="name-group">
+        <label>Full Name</label>
+        <div class="input-wrapper">
+          <input type="text" id="user-name" placeholder="John Doe">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Phone Number or Email</label>
+        <div class="input-wrapper">
+          <input type="text" id="user-identifier" placeholder="name@example.com or phone" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Password</label>
+        <div class="input-wrapper">
+          <input type="password" id="user-password" placeholder="At least 6 characters" required>
+          <button type="button" class="toggle-pwd" onclick="togglePasswordVisibility()">Show</button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="submit-btn">Create Account</button>
+    </form>
+
+    <div class="switch-mode">
+      <span id="toggle-auth-mode" onclick="toggleAuthMode()">Already have an account? Log In</span>
+    </div>
+  </div>
+
+  <script>
+    let currentRole = 'rider'; // 'rider' or 'driver'
+    let isSignUpMode = true;   // true = Register, false = Login
+
+    function selectRole(role) {
+      currentRole = role;
+      document.getElementById('btn-role-rider').classList.toggle('active', role === 'rider');
+      document.getElementById('btn-role-driver').classList.toggle('active', role === 'driver');
+      
+      const sub = document.getElementById('sub-title');
+      if (role === 'driver') {
+        sub.innerText = "Driver Partner Portal (Keep 100% Fare)";
+      } else {
+        sub.innerText = "Zero Commission Peer-to-Peer Rides";
+      }
+    }
+
+    function toggleAuthMode() {
+      isSignUpMode = !isSignUpMode;
+      const submitBtn = document.getElementById('submit-btn');
+      const toggleLink = document.getElementById('toggle-auth-mode');
+      const nameGroup = document.getElementById('name-group');
+      const alertBox = document.getElementById('alert-box');
+
+      alertBox.style.display = 'none';
+
+      if (isSignUpMode) {
+        submitBtn.innerText = currentRole === 'driver' ? "Register as Driver" : "Create Rider Account";
+        toggleLink.innerText = "Already have an account? Log In";
+        nameGroup.style.display = 'block';
+      } else {
+        submitBtn.innerText = "Log In";
+        toggleLink.innerText = "Don't have an account? Sign Up";
+        nameGroup.style.display = 'none';
+      }
+    }
+
+    function togglePasswordVisibility() {
+      const pwd = document.getElementById('user-password');
+      const btn = document.querySelector('.toggle-pwd');
+      if (pwd.type === 'password') {
+        pwd.type = 'text';
+        btn.innerText = 'Hide';
+      } else {
+        pwd.type = 'password';
+        btn.innerText = 'Show';
+      }
+    }
+
+    function showAlert(msg, isError = true) {
+      const alertBox = document.getElementById('alert-box');
+      alertBox.innerText = msg;
+      alertBox.className = 'alert-msg ' + (isError ? 'error' : 'success');
+      alertBox.style.display = 'block';
+    }
+
+    function handleAuth(e) {
+      e.preventDefault();
+
+      const identifier = document.getElementById('user-identifier').value.trim();
+      const password = document.getElementById('user-password').value.trim();
+      const fullName = document.getElementById('user-name').value.trim() || 'User';
+
+      if (password.length < 6) {
+        showAlert('Password must be at least 6 characters long.');
+        return;
+      }
+
+      // Load saved users database from localStorage
+      let users = JSON.parse(localStorage.getItem('fairride_accounts') || '{}');
+      const userKey = `${currentRole}_${identifier.toLowerCase()}`;
+
+      if (isSignUpMode) {
+        // Sign Up
+        if (users[userKey]) {
+          showAlert('An account with this identifier already exists. Please log in.');
+          return;
+        }
+
+        // Store account
+        users[userKey] = {
+          name: fullName,
+          identifier: identifier,
+          password: password,
+          role: currentRole,
+          createdAt: Date.now()
+        };
+        localStorage.setItem('fairride_accounts', JSON.stringify(users));
+
+        // Save active session
+        localStorage.setItem('fairride_session', JSON.stringify({
+          name: fullName,
+          role: currentRole,
+          identifier: identifier
+        }));
+
+        showAlert('Account created! Redirecting...', false);
+
+        setTimeout(redirectToPortal, 800);
+
+      } else {
+        // Log In
+        const account = users[userKey];
+
+        if (!account || account.password !== password) {
+          showAlert('Invalid phone/email or password.');
+          return;
+        }
+
+        // Save active session
+        localStorage.setItem('fairride_session', JSON.stringify({
+          name: account.name,
+          role: currentRole,
+          identifier: account.identifier
+        }));
+
+        showAlert('Login successful! Redirecting...', false);
+
+        setTimeout(redirectToPortal, 800);
+      }
+    }
+
+    function redirectToPortal() {
+      if (currentRole === 'driver') {
+        window.location.href = 'Drivers/driver.html';
+      } else {
+        window.location.href = 'Riders/index.html';
+      }
+    }
+
+    // Auto-fill active session if already logged in
+    window.onload = function() {
+      const session = JSON.parse(localStorage.getItem('fairride_session') || 'null');
+      if (session && session.role) {
+        selectRole(session.role);
+      }
+    };
+  </script>
+</body>
+</html>

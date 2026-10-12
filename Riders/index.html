@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FairRide - Rider Web App</title>
+  
+  <!-- Leaflet Map Library -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Full-Screen Map -->
+  <div id="map"></div>
+
+  <!-- Rider Booking Panel -->
+  <div id="ride-panel">
+    <div class="header-bar">
+      <div>
+        <h3 id="display-user">Hi, Rider</h3>
+        <span class="status-online">● Online</span>
+      </div>
+      <button class="logout-btn" onclick="logout()">Log Out</button>
+    </div>
+
+    <!-- Inputs -->
+    <div class="location-inputs">
+      <div class="input-wrapper">
+        <div class="field-row">
+          <div class="dot dot-pickup"></div>
+          <input type="text" id="pickup-input" placeholder="Enter pickup address" autocomplete="off" oninput="fetchSuggestions('pickup')">
+          <button class="loc-btn" id="gps-btn" onclick="useCurrentLocation()">GPS</button>
+        </div>
+        <ul id="pickup-suggestions" class="suggestions-list"></ul>
+      </div>
+
+      <div class="input-wrapper">
+        <div class="field-row">
+          <div class="dot dot-dropoff"></div>
+          <input type="text" id="dropoff-input" placeholder="Enter destination address" autocomplete="off" oninput="fetchSuggestions('dropoff')">
+        </div>
+        <ul id="dropoff-suggestions" class="suggestions-list"></ul>
+      </div>
+    </div>
+
+    <!-- Fare Breakdown Card -->
+    <div class="price-card">
+      <div class="price-header">
+        <div>
+          <div class="fare-title">Fair Saver</div>
+          <div id="route-stats" class="route-stats">Choose locations to calculate</div>
+        </div>
+        <div id="total-fare" class="total-fare">$0.00</div>
+      </div>
+      
+      <div class="price-breakdown" id="fare-breakdown" style="display: none;">
+        <div class="breakdown-row"><span>Base Fare</span><span>$3.00</span></div>
+        <div class="breakdown-row"><span>Distance & Time</span><span id="dist-time-cost">$0.00</span></div>
+        <div class="breakdown-row"><span class="toll-tag" id="toll-label">Tolls</span><span id="toll-cost" class="toll-tag">$0.00</span></div>
+      </div>
+    </div>
+
+    <button class="btn" id="request-btn" disabled onclick="requestRide()">Select Both Locations</button>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
