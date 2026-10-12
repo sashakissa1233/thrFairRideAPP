@@ -6,24 +6,36 @@
   }
 })();
 
-// --- REAL-TIME INTERNET RELAY ---
-const pieSocket = new PieSocket.default({
-  clusterId: 'demo',
-  apiKey: 'VC3mXZalsjhgfpnjvucxR4RydWuDYnxkoG0rLZ5m'
-});
+function showDebug(msg) {
+  const box = document.getElementById('mobile-debug');
+  if (box) box.innerText = msg;
+  console.log(msg);
+}
 
-let channel;
-pieSocket.subscribe('fairride_global_channel').then(ch => {
-  channel = ch;
+// --- PEERJS DIRECT WEBRTC CONNECTION ---
+const DRIVER_ROOM_ID = 'fairride-driver-hub-prod-99';
+let peer = null;
+let activeConnection = null;
 
-  channel.listen('RIDE_ACCEPTED', (data) => {
-    const reqBtn = document.getElementById('request-btn');
-    reqBtn.style.background = '#3b82f6';
-    reqBtn.style.color = '#fff';
-    reqBtn.innerText = `Driver Found: ${data.driverName} (ETA ${data.eta})`;
-    alert(`A driver accepted your ride!\n\nDriver: ${data.driverName}\nArriving in: ${data.eta}`);
+function initPeer() {
+  peer = new Peer();
+
+  peer.on('open', (id) => {
+    showDebug('Rider ready. Connected to network.');
+    const statusEl = document.getElementById('connection-status');
+    if (statusEl) {
+      statusEl.innerText = '● Connected';
+      statusEl.style.color = '#10b981';
+    }
   });
-});
+
+  peer.on('error', (err) => {
+    showDebug('Connection Warning: ' + err.type);
+    console.warn(err);
+  });
+}
+
+initPeer();
 
 let map;
 let pickupMarker = null;
@@ -82,6 +94,7 @@ const TOLL_CHECKPOINTS = [
 ];
 
 function logout() {
+  if (peer) peer.destroy();
   try {
     localStorage.removeItem('fairride_session');
   } catch (e) {}
@@ -148,6 +161,16 @@ async function useCurrentLocation() {
         return;
       }
     } catch (e) {}
+
+    try {
+      const res2 = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client');
+      const data2 = await res2.json();
+      if (data2.latitude && data2.longitude) {
+        applyCoordinates(data2.latitude, data2.longitude, `${data2.city || 'Current Area'}`);
+        return;
+      }
+    } catch (e) {}
+
     if (gpsBtn) gpsBtn.innerText = 'GPS';
     alert('Could not detect location. Please type your pickup address above.');
   };
@@ -160,7 +183,7 @@ async function useCurrentLocation() {
   navigator.geolocation.getCurrentPosition(
     (pos) => applyCoordinates(pos.coords.latitude, pos.coords.longitude),
     () => fallbackToIP(),
-    { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+    { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
   );
 }
 
@@ -322,27 +345,58 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// Broadcast ride directly to driver
 function requestRide() {
-  const p = document.getElementById('pickup-input').value;
-  const d = document.getElementById('dropoff-input').value;
-  const stats = document.getElementById('route-stats').innerText;
-
   const reqBtn = document.getElementById('request-btn');
   reqBtn.disabled = true;
-  reqBtn.innerText = 'Broadcasting to nearby drivers...';
+  reqBtn.innerText = 'Connecting to Driver...';
+  showDebug('Calling Driver Portal...');
 
-  const payload = {
-    pickupText: p,
-    dropoffText: d,
-    fare: calculatedFare,
-    stats: stats,
-    routeCoords: rawRouteCoords,
-    timestamp: Date.now()
-  };
-
-  if (channel) {
-    channel.publish('NEW_RIDE_REQUEST', payload);
+  if (!peer || peer.disconnected) {
+    initPeer();
   }
+
+  activeConnection = peer.connect(DRIVER_ROOM_ID);
+
+  activeConnection.on('open', () => {
+    showDebug('Connected! Sending dispatch packet...');
+    const payload = {
+      type: 'NEW_RIDE_REQUEST',
+      pickupText: document.getElementById('pickup-input').value,
+      dropoffText: document.getElementById('dropoff-input').value,
+      fare: calculatedFare,
+      stats: document.getElementById('route-stats').innerText,
+      routeCoords: rawRouteCoords,
+      timestamp: Date.now()
+    };
+    activeConnection.send(payload);
+    reqBtn.innerText = 'Dispatched • Waiting for Driver';
+    showDebug('Ride packet delivered! Awaiting acceptance.');
+  });
+
+  activeConnection.on('data', (data) => {
+    if (data.type === 'RIDE_ACCEPTED') {
+      showDebug('ACCEPTED by ' + data.driverName);
+      reqBtn.style.background = '#3b82f6';
+      reqBtn.style.color = '#fff';
+      reqBtn.innerText = `Driver Found: ${data.driverName} (ETA ${data.eta})`;
+      alert(`Driver Accepted Your Ride!\n\nDriver: ${data.driverName}\nArriving in: ${data.eta}`);
+    }
+  });
+
+  activeConnection.on('error', (err) => {
+    showDebug('Dispatch Error: Driver may be offline.');
+    reqBtn.disabled = false;
+    reqBtn.innerText = 'Retry Request';
+  });
+
+  setTimeout(() => {
+    if (reqBtn.innerText === 'Connecting to Driver...') {
+      showDebug('Driver is offline or not found. Open driver.html on PC first.');
+      reqBtn.disabled = false;
+      reqBtn.innerText = 'Driver Offline - Retry';
+    }
+  }, 7000);
 }
 
 window.onload = function() {
