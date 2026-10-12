@@ -1,4 +1,4 @@
-// --- SESSION GUARD: Prevent direct URL access without login ---
+// --- SESSION GUARD ---
 (function checkDriverAuth() {
   const session = JSON.parse(localStorage.getItem('fairride_session') || 'null');
   if (!session || session.role !== 'driver') {
@@ -6,10 +6,25 @@
   }
 })();
 
+// --- REAL-TIME INTERNET RELAY ---
+const pieSocket = new PieSocket.default({
+  clusterId: 'demo',
+  apiKey: 'VC3mXZalsjhgfpnjvucxR4RydWuDYnxkoG0rLZ5m'
+});
+
+let channel;
 let map;
 let driverMarker = null;
 let routeLine = null;
 let currentOffer = null;
+
+pieSocket.subscribe('fairride_global_channel').then(ch => {
+  channel = ch;
+
+  channel.listen('NEW_RIDE_REQUEST', (data) => {
+    handleIncomingRequest(data);
+  });
+});
 
 function driverLogout() {
   try {
@@ -41,8 +56,6 @@ function initDriverMap() {
       { enableHighAccuracy: false, timeout: 5000 }
     );
   }
-
-  checkExistingRequest();
 }
 
 function handleIncomingRequest(data) {
@@ -64,30 +77,6 @@ function handleIncomingRequest(data) {
   }
 }
 
-// Listen for ride requests broadcast via storage
-window.addEventListener('storage', (event) => {
-  if (event.key === 'fairride_ride_request' && event.newValue) {
-    try {
-      const data = JSON.parse(event.newValue);
-      if (data.type === 'NEW_RIDE_REQUEST') {
-        handleIncomingRequest(data);
-      }
-    } catch (e) {}
-  }
-});
-
-function checkExistingRequest() {
-  try {
-    const raw = localStorage.getItem('fairride_ride_request');
-    if (raw) {
-      const data = JSON.parse(raw);
-      if (data && (Date.now() - data.timestamp < 60000)) {
-        handleIncomingRequest(data);
-      }
-    }
-  } catch (e) {}
-}
-
 function acceptRide() {
   if (!currentOffer) return;
 
@@ -95,13 +84,14 @@ function acceptRide() {
   const dName = session.name ? `${session.name} (Partner)` : 'Driver (Fair Partner)';
 
   const responsePayload = {
-    type: 'RIDE_ACCEPTED',
     driverName: dName,
     eta: '5 mins',
     timestamp: Date.now()
   };
 
-  localStorage.setItem('fairride_driver_response', JSON.stringify(responsePayload));
+  if (channel) {
+    channel.publish('RIDE_ACCEPTED', responsePayload);
+  }
 
   document.getElementById('incoming-request-card').innerHTML = `
     <div style="color: #10b981; font-weight: 700; margin-bottom: 6px;">Ride Accepted!</div>
@@ -115,7 +105,6 @@ function declineRide() {
   document.getElementById('incoming-request-card').style.display = 'none';
   document.getElementById('waiting-status').style.display = 'block';
   if (routeLine) map.removeLayer(routeLine);
-  localStorage.removeItem('fairride_ride_request');
   currentOffer = null;
 }
 
